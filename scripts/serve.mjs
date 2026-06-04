@@ -4,6 +4,8 @@ import path from "node:path";
 
 const root = process.cwd();
 const distDir = path.join(root, "dist");
+const gameAssetsDir = path.join(root, "src", "assets");
+const threeDir = path.join(root, "node_modules", "three");
 const preferredPort = Number.parseInt(process.env.PORT ?? "4173", 10);
 
 const mimeTypes = {
@@ -14,7 +16,10 @@ const mimeTypes = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
-  ".svg": "image/svg+xml"
+  ".svg": "image/svg+xml",
+  ".glb": "model/gltf-binary",
+  ".gltf": "model/gltf+json",
+  ".fbx": "application/octet-stream"
 };
 
 async function exists(filePath) {
@@ -26,20 +31,43 @@ async function exists(filePath) {
   }
 }
 
+async function resolveTarget(requested) {
+  if (requested.startsWith("/vendor/three/")) {
+    const filePath = path.join(threeDir, requested.slice("/vendor/three/".length));
+    if (!filePath.startsWith(threeDir)) {
+      return null;
+    }
+    return (await exists(filePath)) ? filePath : null;
+  }
+
+  if (requested.startsWith("/game-assets/")) {
+    const filePath = path.join(gameAssetsDir, requested.slice("/game-assets/".length));
+    if (!filePath.startsWith(gameAssetsDir)) {
+      return null;
+    }
+    return (await exists(filePath)) ? filePath : null;
+  }
+
+  const filePath = path.join(distDir, requested);
+  if (!filePath.startsWith(distDir)) {
+    return null;
+  }
+
+  return (await exists(filePath)) ? filePath : path.join(distDir, "index.html");
+}
+
 function createServer() {
   return http.createServer(async (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
     const safePath = path.normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
     const requested = safePath === "/" ? "/index.html" : safePath;
-    const filePath = path.join(distDir, requested);
+    const target = await resolveTarget(requested);
 
-    if (!filePath.startsWith(distDir)) {
-      response.writeHead(403);
-      response.end("Forbidden");
+    if (!target) {
+      response.writeHead(404);
+      response.end("Not found");
       return;
     }
-
-    const target = await exists(filePath) ? filePath : path.join(distDir, "index.html");
 
     try {
       const body = await fs.readFile(target);

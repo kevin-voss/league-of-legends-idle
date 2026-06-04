@@ -1,3 +1,4 @@
+import { isDebugEnabled } from "../../core/DebugLog.js";
 import { CANVAS_HEIGHT, CANVAS_WIDTH,                } from "../../data/Constants.js";
                                                             
 import { createHUD,          } from "../components/HUD.js";
@@ -5,6 +6,9 @@ import { createHUD,          } from "../components/HUD.js";
                               
                        
                             
+                        
+                            
+                                   
            
                      
  
@@ -14,23 +18,35 @@ export function createMatchScreen(match       , speed           , onSpeed       
   shell.className = "match-shell";
 
   const hud = createHUD(match, speed, onSpeed);
-  const canvasWrap = document.createElement("div");
-  canvasWrap.className = "canvas-wrap";
+  const viewport = document.createElement("div");
+  viewport.className = "match-viewport";
 
   const canvas = document.createElement("canvas");
   canvas.width = CANVAS_WIDTH;
   canvas.height = CANVAS_HEIGHT;
   canvas.setAttribute("aria-label", "Idle Rifts match simulation");
-  canvasWrap.append(canvas);
+
+  const worldOverlay = document.createElement("div");
+  worldOverlay.className = "world-overlay";
+  worldOverlay.setAttribute("aria-hidden", "true");
+
+  const debugOverlay = document.createElement("pre");
+  debugOverlay.className = "match-debug";
+  debugOverlay.hidden = !isDebugEnabled();
+
+  viewport.append(canvas, worldOverlay, debugOverlay);
 
   const log = document.createElement("div");
   log.className = "match-log";
 
-  shell.append(hud.element, canvasWrap, log);
+  shell.append(hud.element, viewport, log);
 
   return {
     element: shell,
     canvas,
+    viewport,
+    worldOverlay,
+    debugOverlay: isDebugEnabled() ? debugOverlay : null,
     hud,
     update: () => {
       hud.update();

@@ -7,6 +7,8 @@ import { calculateAttackPeriod, calculateTypedDamage } from "../combat/DamageCal
 
 export class Monster extends Entity {
   monsterType             ;
+  /** MapData camp id for jungle camps; empty for dragon/baron. */
+  campId        ;
   name        ;
   attackTimer = 0;
   attackSpeed        ;
@@ -18,11 +20,12 @@ export class Monster extends Entity {
   home       ;
   activeAt        ;
 
-  constructor(monsterType             , name        , position       , activeAt        , respawnSeconds        ) {
+  constructor(monsterType             , name        , position       , activeAt        , respawnSeconds        , campId = "") {
     const hp = monsterType === "baron" ? 3200 : monsterType === "dragon" ? 2100 : 760;
     super("monster", "neutral", position, hp, 0, monsterType === "camp" ? 18 : 30);
     this.id = `objective-${monsterType}-${name.toLowerCase().replace(/\s+/g, "-")}`;
     this.monsterType = monsterType;
+    this.campId = campId;
     this.name = name;
     this.activeAt = activeAt;
     this.respawnSeconds = respawnSeconds;

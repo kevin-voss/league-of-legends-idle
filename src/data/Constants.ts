@@ -59,8 +59,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   top: "Top",
   jungle: "Jungle",
   mid: "Mid",
-  adc: "ADC",
-  support: "Support"
+  adc: "Bot (ADC)",
+  support: "Bot (Support)"
 };
 
 export const ROLE_TO_LANE: Record<Role, "top" | "mid" | "bot"> = {

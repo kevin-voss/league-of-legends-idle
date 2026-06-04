@@ -39,8 +39,6 @@ const BLUE_HALF_RAILS                          = {
   ]
 };
 
-const MIRROR_LANE                         = { top: "bot", mid: "mid", bot: "top" };
-
 /** Red halves meet blue at the same river points so lanes do not cut diagonally across the rift. */
 const RED_HALF_RAILS                          = {
   top: [

@@ -1,5 +1,6 @@
+import { debugError, debugLog } from "./DebugLog.js";
 import { GameLoop } from "./GameLoop.js";
-import { Renderer } from "./Renderer.js";
+import { ThreeRenderer } from "./ThreeRenderer.js";
 import { AccountStore } from "../state/AccountStore.js";
 import { Match } from "../game/simulation/Match.js";
                                                       
@@ -13,7 +14,7 @@ export class Engine {
           root             ;
           store = new AccountStore();
           loop                  = null;
-          renderer                  = null;
+          renderer                       = null;
           match               = null;
           matchScreen                     = null;
           speed            = 1;
@@ -59,10 +60,45 @@ export class Engine {
       this.speed = speed;
       this.loop?.setSpeed(speed);
     });
-    this.renderer = new Renderer(this.matchScreen.canvas);
+    this.setScreen(this.matchScreen.element);
+    void this.bootMatchRenderer();
+  }
+
+          async bootMatchRenderer()                {
+    if (!this.match || !this.matchScreen) {
+      return;
+    }
+
+    const { canvas, worldOverlay, viewport, debugOverlay } = this.matchScreen;
+    viewport.classList.add("is-loading");
+    if (debugOverlay) {
+      debugOverlay.textContent = "phase: loading assets…";
+    }
+
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    debugLog("Engine", "bootMatchRenderer", {
+      clientWidth: canvas.clientWidth,
+      clientHeight: canvas.clientHeight
+    });
+
+    const renderer = new ThreeRenderer(canvas, worldOverlay, debugOverlay);
+    try {
+      await renderer.init(this.match);
+    } catch (error) {
+      debugError("Engine", "Three.js init failed", error);
+      const message = error instanceof Error ? error.message : String(error);
+      viewport.classList.remove("is-loading");
+      if (debugOverlay) {
+        debugOverlay.textContent = `init failed:\n${message}`;
+      }
+      this.showViewportError(viewport, message);
+      return;
+    }
+
+    this.renderer = renderer;
     this.loop = new GameLoop((dt) => this.updateMatch(dt), () => this.renderMatch());
     this.loop.setSpeed(this.speed);
-    this.setScreen(this.matchScreen.element);
+    viewport.classList.remove("is-loading");
     this.loop.start();
   }
 
@@ -94,6 +130,7 @@ export class Engine {
 
           stopMatch()       {
     this.stopLoopOnly();
+    this.renderer?.dispose();
     this.match = null;
     this.renderer = null;
     this.matchScreen = null;
@@ -106,5 +143,12 @@ export class Engine {
 
           setScreen(element             )       {
     this.root.replaceChildren(element);
+  }
+
+          showViewportError(viewport             , message        )       {
+    const banner = document.createElement("div");
+    banner.className = "match-error-banner";
+    banner.textContent = `3D failed to load: ${message}. Open DevTools or add ?debug=1 to the URL.`;
+    viewport.append(banner);
   }
 }

@@ -554,12 +554,13 @@ export class Match                         {
   }
 
           spawnChampions(playerTeam                     , enemyTeam                     )       {
+    /** LoL-style base spawn: 1 top, 1 jungle, 1 mid, 2 bot (adc + support). */
     const offsets                      = {
-      top: { x: 0, y: -34 },
-      jungle: { x: 38, y: -6 },
-      mid: { x: 0, y: 0 },
-      adc: { x: -34, y: 30 },
-      support: { x: 34, y: 34 }
+      top: { x: -58, y: -32 },
+      jungle: { x: 58, y: -22 },
+      mid: { x: 0, y: -12 },
+      adc: { x: -62, y: 52 },
+      support: { x: 62, y: 56 }
     };
 
     for (const selection of playerTeam) {
@@ -597,7 +598,7 @@ export class Match                         {
 
           spawnMonsters()       {
     for (const camp of JUNGLE_CAMPS) {
-      this.monsters.push(new Monster("camp", `${camp.side} ${camp.name}`, { x: camp.x, y: camp.y }, 0, 30));
+      this.monsters.push(new Monster("camp", `${camp.side} ${camp.name}`, { x: camp.x, y: camp.y }, 0, 30, camp.id));
     }
 
     this.monsters.push(new Monster("dragon", "Dragon", OBJECTIVE_POSITIONS.dragon, DRAGON_SPAWN_SECONDS, DRAGON_RESPAWN_SECONDS));

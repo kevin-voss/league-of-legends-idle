@@ -7,6 +7,8 @@ export type MonsterType = "camp" | "dragon" | "baron";
 
 export class Monster extends Entity {
   monsterType: MonsterType;
+  /** MapData camp id for jungle camps; empty for dragon/baron. */
+  campId: string;
   name: string;
   attackTimer = 0;
   attackSpeed: number;
@@ -18,11 +20,12 @@ export class Monster extends Entity {
   home: Point;
   activeAt: number;
 
-  constructor(monsterType: MonsterType, name: string, position: Point, activeAt: number, respawnSeconds: number) {
+  constructor(monsterType: MonsterType, name: string, position: Point, activeAt: number, respawnSeconds: number, campId = "") {
     const hp = monsterType === "baron" ? 3200 : monsterType === "dragon" ? 2100 : 760;
     super("monster", "neutral", position, hp, 0, monsterType === "camp" ? 18 : 30);
     this.id = `objective-${monsterType}-${name.toLowerCase().replace(/\s+/g, "-")}`;
     this.monsterType = monsterType;
+    this.campId = campId;
     this.name = name;
     this.activeAt = activeAt;
     this.respawnSeconds = respawnSeconds;

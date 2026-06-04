@@ -305,19 +305,120 @@ button:disabled {
   background: #111611;
 }
 
-.canvas-wrap {
-  display: grid;
-  place-items: center;
-  width: 100%;
-}
-
-canvas {
+.match-viewport {
+  position: relative;
   width: min(100%, 1920px);
+  margin: 0 auto;
   aspect-ratio: 1 / 1;
   border: 1px solid var(--line);
   border-radius: 8px;
+  overflow: hidden;
   background: #172018;
   box-shadow: 0 24px 70px var(--shadow);
+}
+
+.match-viewport.is-loading::after {
+  content: "Loading 3D rift…";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 12, 10, 0.82);
+  color: var(--muted);
+  font-size: 0.95rem;
+  z-index: 3;
+}
+
+.match-viewport canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.world-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 2;
+}
+
+.match-debug {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 4;
+  margin: 0;
+  padding: 8px 10px;
+  max-width: min(420px, 90%);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #b8f0c8;
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  pointer-events: none;
+}
+
+.match-error-banner {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 12, 10, 0.88);
+  color: #ffae9f;
+  text-align: center;
+  font-size: 0.95rem;
+}
+
+.world-health-bar {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 56px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.world-health-bar--compact {
+  min-width: 38px;
+  gap: 0;
+}
+
+.world-health-bar--compact .world-health-bar__track {
+  height: 4px;
+}
+
+.world-health-bar__level {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid #f4d27b;
+  background: #11151a;
+  color: #f4d27b;
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.world-health-bar__track {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+
+.world-health-bar__fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  transition: width 80ms linear;
 }
 
 .hud-scoreboard {
