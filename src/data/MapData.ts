@@ -4,16 +4,30 @@ import type { LaneId, Point, Role, StructureDefinition, TeamSide } from "./model
 const MAP_MARGIN = 120;
 const BASE_INSET = 100;
 
-const RIVER_TOP: Point = { x: CANVAS_WIDTH / 2, y: MAP_MARGIN };
-const RIVER_BOT: Point = { x: CANVAS_WIDTH - MAP_MARGIN, y: CANVAS_HEIGHT / 2 };
+/**
+ * River endpoints on the isometric centerline (logic x === y).
+ * With the 2:1 iso projection and 3D camera, this reads as top-center → bottom-center on screen,
+ * not a logic-vertical line at constant x.
+ */
+const RIVER_TOP: Point = { x: MAP_MARGIN, y: MAP_MARGIN };
+const RIVER_BOT: Point = { x: CANVAS_WIDTH - MAP_MARGIN, y: CANVAS_HEIGHT - MAP_MARGIN };
 const RIVER_MID: Point = { x: CANVAS_WIDTH / 2, y: CANVAS_HEIGHT / 2 };
+
+export const RIVER_PATH: Point[] = [RIVER_TOP, RIVER_BOT];
+
+function pointOnRiverPath(progress: number): Point {
+  return {
+    x: RIVER_TOP.x + (RIVER_BOT.x - RIVER_TOP.x) * progress,
+    y: RIVER_TOP.y + (RIVER_BOT.y - RIVER_TOP.y) * progress
+  };
+}
 
 export const BASE_POSITIONS: Record<TeamSide, Point> = {
   blue: { x: BASE_INSET, y: CANVAS_HEIGHT - BASE_INSET },
   red: { x: CANVAS_WIDTH - BASE_INSET, y: BASE_INSET }
 };
 
-export const MIN_TOWER_SPACING = 348;
+export const MIN_TOWER_SPACING = 300;
 export const TOWER_ATTACK_RANGE = 150;
 
 type RailSet = Record<LaneId, Record<TeamSide, Point[]>>;
@@ -25,33 +39,28 @@ export function mirrorPoint(point: Point): Point {
   };
 }
 
-const BLUE_HALF_RAILS: Record<LaneId, Point[]> = {
-  top: [
-    BASE_POSITIONS.blue,
-    { x: MAP_MARGIN, y: MAP_MARGIN },
-    RIVER_TOP
-  ],
-  mid: [BASE_POSITIONS.blue, RIVER_MID],
-  bot: [
-    BASE_POSITIONS.blue,
-    { x: CANVAS_WIDTH - MAP_MARGIN, y: BASE_POSITIONS.blue.y },
-    RIVER_BOT
-  ]
+/** Outer lane corner (100% for turret placement: nexus → edge). */
+const BLUE_LANE_EDGES: Record<"top" | "bot", Point> = {
+  top: { x: MAP_MARGIN, y: MAP_MARGIN },
+  bot: { x: CANVAS_WIDTH - MAP_MARGIN, y: BASE_POSITIONS.blue.y }
 };
 
-/** Red halves meet blue at the same river points so lanes do not cut diagonally across the rift. */
+const RED_LANE_EDGES: Record<"top" | "bot", Point> = {
+  top: { x: MAP_MARGIN, y: BASE_INSET },
+  bot: { x: CANVAS_WIDTH - MAP_MARGIN, y: CANVAS_HEIGHT - MAP_MARGIN }
+};
+
+const BLUE_HALF_RAILS: Record<LaneId, Point[]> = {
+  top: [BASE_POSITIONS.blue, BLUE_LANE_EDGES.top, RIVER_TOP],
+  mid: [BASE_POSITIONS.blue, RIVER_MID],
+  bot: [BASE_POSITIONS.blue, BLUE_LANE_EDGES.bot, RIVER_BOT]
+};
+
+/** Red halves meet blue at the same river clash points. */
 const RED_HALF_RAILS: Record<LaneId, Point[]> = {
-  top: [
-    BASE_POSITIONS.red,
-    { x: CANVAS_WIDTH - MAP_MARGIN, y: MAP_MARGIN },
-    RIVER_TOP
-  ],
+  top: [BASE_POSITIONS.red, RED_LANE_EDGES.top, RIVER_TOP],
   mid: [BASE_POSITIONS.red, RIVER_MID],
-  bot: [
-    BASE_POSITIONS.red,
-    { x: CANVAS_WIDTH - MAP_MARGIN, y: BASE_INSET },
-    RIVER_BOT
-  ]
+  bot: [BASE_POSITIONS.red, RED_LANE_EDGES.bot, RIVER_BOT]
 };
 
 export const MAP_RAILS: RailSet = {
@@ -69,16 +78,9 @@ export const MAP_RAILS: RailSet = {
   }
 };
 
-const TOWER_T2_RAIL_FRACTION = 0.26;
-const TOWER_GAP = 48;
-const MIN_TOWER_SPACING_INTERNAL = TOWER_ATTACK_RANGE * 2 + TOWER_GAP;
-
-/** Shared march progress along the attacker's lane path for outer (T1) turrets. */
-const T1_MARCH_PROGRESS: Record<LaneId, number> = {
-  top: 0.58,
-  mid: 0.54,
-  bot: 0.58
-};
+/** Lane progress from nexus (0) to the outer lane edge (1). T2 inner at 35%, T1 outer at 70%. */
+export const TOWER_T2_LANE_PROGRESS = 0.35;
+export const TOWER_T1_LANE_PROGRESS = 0.7;
 
 const BLUE_TOWERS: Record<LaneId, Record<1 | 2, Point>> = {
   top: placeLaneTowers("top", "blue"),
@@ -93,65 +95,120 @@ const RED_TOWERS: Record<LaneId, Record<1 | 2, Point>> = {
 };
 
 
-const BLUE_TOP_WOLVES = { x: 360, y: 1147 };
-const BLUE_TOP_GROMP = { x: 450, y: 682 };
-const BLUE_BOT_RAPTORS = { x: 700, y: 1520 };
-const BLUE_BOT_KRUGS = { x: 520, y: 1210 };
+export type JungleHalf = "top" | "bot";
 
-const BLUE_JUNGLE_BLOB_CENTERS: Point[] = [
-  {
-    x: (BLUE_TOP_WOLVES.x + BLUE_TOP_GROMP.x) / 2,
-    y: (BLUE_TOP_WOLVES.y + BLUE_TOP_GROMP.y) / 2
+/** Two camps per pocket: one nearer base/turrets, one nearer the river. */
+type JungleCampSlot = "inner" | "river";
+
+/**
+ * Blue jungle camp coordinates (logic plane).
+ * Placed in the wedge between lanes — not on the mid rail.
+ */
+const BLUE_JUNGLE_CAMP_SLOTS: Record<JungleHalf, Record<JungleCampSlot, Point>> = {
+  top: {
+    inner: { x: 210, y: 450 },
+    river: { x: 650, y: 780 }
   },
-  {
-    x: (BLUE_BOT_RAPTORS.x + BLUE_BOT_KRUGS.x) / 2,
-    y: (BLUE_BOT_RAPTORS.y + BLUE_BOT_KRUGS.y) / 2
+  bot: {
+    inner: { x: 480, y: 1640 },
+    river: { x: 780, y: 1480 }
   }
-];
+};
+
+function midpoint(a: Point, b: Point): Point {
+  return { x: roundPoint((a.x + b.x) / 2), y: roundPoint((a.y + b.y) / 2) };
+}
+
+function redJungleCampSlots(): Record<JungleHalf, Record<JungleCampSlot, Point>> {
+  return {
+    top: {
+      inner: mirrorPoint(BLUE_JUNGLE_CAMP_SLOTS.bot.river),
+      river: mirrorPoint(BLUE_JUNGLE_CAMP_SLOTS.bot.inner)
+    },
+    bot: {
+      inner: mirrorPoint(BLUE_JUNGLE_CAMP_SLOTS.top.river),
+      river: mirrorPoint(BLUE_JUNGLE_CAMP_SLOTS.top.inner)
+    }
+  };
+}
+
+const RED_JUNGLE_CAMP_SLOTS = redJungleCampSlots();
+
+function jungleCampSlotsForSide(side: TeamSide): Record<JungleHalf, Record<JungleCampSlot, Point>> {
+  return side === "blue" ? BLUE_JUNGLE_CAMP_SLOTS : RED_JUNGLE_CAMP_SLOTS;
+}
+
+/** Visual / UI centroid for each jungle pocket (midpoint of its two camps). */
+export const JUNGLE_QUADRANT_CENTERS: Record<TeamSide, Record<JungleHalf, Point>> = {
+  blue: {
+    top: midpoint(BLUE_JUNGLE_CAMP_SLOTS.top.inner, BLUE_JUNGLE_CAMP_SLOTS.top.river),
+    bot: midpoint(BLUE_JUNGLE_CAMP_SLOTS.bot.inner, BLUE_JUNGLE_CAMP_SLOTS.bot.river)
+  },
+  red: {
+    top: midpoint(RED_JUNGLE_CAMP_SLOTS.top.inner, RED_JUNGLE_CAMP_SLOTS.top.river),
+    bot: midpoint(RED_JUNGLE_CAMP_SLOTS.bot.inner, RED_JUNGLE_CAMP_SLOTS.bot.river)
+  }
+};
+
+/** Returns the center point of a team's top or bot jungle pocket. */
+export function getJungleQuadrantCenter(side: TeamSide, half: JungleHalf): Point {
+  return JUNGLE_QUADRANT_CENTERS[side][half];
+}
+
+/** Minimum logic-space distance between camps on the same side. */
+export const MIN_JUNGLE_CAMP_SPACING = 280;
 
 export const JUNGLE_BLOB_CENTERS: Record<TeamSide, Point[]> = {
-  blue: BLUE_JUNGLE_BLOB_CENTERS,
-  red: BLUE_JUNGLE_BLOB_CENTERS.map(mirrorPoint)
+  blue: [JUNGLE_QUADRANT_CENTERS.blue.top, JUNGLE_QUADRANT_CENTERS.blue.bot],
+  red: [JUNGLE_QUADRANT_CENTERS.red.top, JUNGLE_QUADRANT_CENTERS.red.bot]
 };
 
-const blueJunglePath = [
-  BASE_POSITIONS.blue,
-  BLUE_BOT_RAPTORS,
-  BLUE_BOT_KRUGS,
-  BLUE_TOP_WOLVES,
-  BLUE_TOP_GROMP
-];
-
-export const JUNGLE_PATHS: Record<TeamSide, Point[]> = {
-  blue: blueJunglePath,
-  red: blueJunglePath.map(mirrorPoint)
-};
+/** Neutral pits along the river between mid and top/bot lane mouths. */
+function riverPitBetweenMidAnd(lane: "top" | "bot"): Point {
+  return pointOnRiverPath(lane === "top" ? 0.28 : 0.72);
+}
 
 export const OBJECTIVE_POSITIONS = {
-  dragon: { x: 1140, y: 1210 },
-  baron: mirrorPoint({ x: 1140, y: 1210 })
+  baron: riverPitBetweenMidAnd("top"),
+  dragon: riverPitBetweenMidAnd("bot")
 };
 
-const BLUE_JUNGLE_CAMPS = [
-  { id: "blue-top-wolves", side: "blue" as TeamSide, name: "Top Wolves", ...BLUE_TOP_WOLVES },
-  { id: "blue-top-gromp", side: "blue" as TeamSide, name: "Top Gromp", ...BLUE_TOP_GROMP },
-  { id: "blue-bot-raptors", side: "blue" as TeamSide, name: "Bot Raptors", ...BLUE_BOT_RAPTORS },
-  { id: "blue-bot-krugs", side: "blue" as TeamSide, name: "Bot Krugs", ...BLUE_BOT_KRUGS }
+export type JungleCampDefinition = {
+  id: string;
+  side: TeamSide;
+  name: string;
+  shortName: string;
+  x: number;
+  y: number;
+};
+
+function defineSideJungleCamps(side: TeamSide): JungleCampDefinition[] {
+  const slots = jungleCampSlotsForSide(side);
+
+  return [
+    { id: `${side}-top-wolves`, side, name: "Top Wolves", shortName: "Wolves", ...slots.top.inner },
+    { id: `${side}-top-gromp`, side, name: "Top Gromp", shortName: "Gromp", ...slots.top.river },
+    { id: `${side}-bot-raptors`, side, name: "Bot Raptors", shortName: "Raptors", ...slots.bot.inner },
+    { id: `${side}-bot-krugs`, side, name: "Bot Krugs", shortName: "Krugs", ...slots.bot.river }
+  ];
+}
+
+export const JUNGLE_CAMPS: JungleCampDefinition[] = [
+  ...defineSideJungleCamps("blue"),
+  ...defineSideJungleCamps("red")
 ];
 
-export const JUNGLE_CAMPS = [
-  ...BLUE_JUNGLE_CAMPS,
-  ...BLUE_JUNGLE_CAMPS.map((camp) => {
-    const mirrored = mirrorPoint(camp);
-    return {
-      id: camp.id.replace("blue", "red"),
-      side: "red" as TeamSide,
-      name: camp.name,
-      x: mirrored.x,
-      y: mirrored.y
-    };
-  })
-];
+function junglePathForSide(side: TeamSide): Point[] {
+  const camps = JUNGLE_CAMPS.filter((camp) => camp.side === side);
+  const botCamps = camps.filter((camp) => camp.id.includes("-bot-"));
+  const topCamps = camps.filter((camp) => camp.id.includes("-top-"));
+  return [BASE_POSITIONS[side], ...botCamps, ...topCamps];
+}
+
+export const JUNGLE_PATHS: Record<TeamSide, Point[]> = {
+  blue: junglePathForSide("blue"),
+  red: junglePathForSide("red")
+};
 
 const TOWER_T1_HP = 1150;
 const TOWER_T2_HP = 1550;
@@ -219,6 +276,9 @@ export function getRoleLane(role: Role): LaneId {
   if (role === "adc" || role === "support") {
     return "bot";
   }
+  if (role === "mid") {
+    return "mid";
+  }
   return "mid";
 }
 
@@ -230,6 +290,16 @@ export function getLaneCenter(lane: LaneId): Point {
   return pointAtRailProgress(MAP_RAILS[lane].blue, 0.5);
 }
 
+/** Nexus → lane edge (0–100% turret line). Mid uses nexus → river center. */
+export function getNexusToEdgeRail(lane: LaneId, side: TeamSide): Point[] {
+  if (lane === "mid") {
+    return side === "blue" ? BLUE_HALF_RAILS.mid : RED_HALF_RAILS.mid;
+  }
+
+  const edges = side === "blue" ? BLUE_LANE_EDGES : RED_LANE_EDGES;
+  return [BASE_POSITIONS[side], edges[lane]];
+}
+
 function connectLaneHalves(ownHalf: Point[], enemyHalf: Point[]): Point[] {
   return [
     ...ownHalf,
@@ -238,27 +308,11 @@ function connectLaneHalves(ownHalf: Point[], enemyHalf: Point[]): Point[] {
 }
 
 function placeLaneTowers(lane: LaneId, side: TeamSide): Record<1 | 2, Point> {
-  const halfRail = side === "blue" ? BLUE_HALF_RAILS[lane] : RED_HALF_RAILS[lane];
-  const railLength = getPathLength(halfRail);
-  let t2Distance = railLength * TOWER_T2_RAIL_FRACTION;
-
-  const marchPath = MAP_RAILS[lane][getEnemySide(side)];
-  const marchLength = getPathLength(marchPath);
-  let t1Distance = marchLength * T1_MARCH_PROGRESS[lane];
-
-  const t2Pos = pointAtRailDistance(halfRail, t2Distance);
-  let t1Pos = pointAtRailDistance(marchPath, t1Distance);
-  let spacing = Math.hypot(t1Pos.x - t2Pos.x, t1Pos.y - t2Pos.y);
-
-  while (spacing < MIN_TOWER_SPACING_INTERNAL && t1Distance < marchLength * 0.85) {
-    t1Distance += 24;
-    t1Pos = pointAtRailDistance(marchPath, t1Distance);
-    spacing = Math.hypot(t1Pos.x - t2Pos.x, t1Pos.y - t2Pos.y);
-  }
+  const nexusToEdge = getNexusToEdgeRail(lane, side);
 
   return {
-    1: t1Pos,
-    2: t2Pos
+    1: pointAtRailProgress(nexusToEdge, TOWER_T1_LANE_PROGRESS),
+    2: pointAtRailProgress(nexusToEdge, TOWER_T2_LANE_PROGRESS)
   };
 }
 

@@ -2,6 +2,12 @@
 
 A dependency-light TypeScript canvas idle auto-battler inspired by MOBA strategy loops: roles, lanes, jungle camps, objectives, team building, post-match rewards, and persistent account progression.
 
+## Documentation
+
+- **[docs/MAP.md](docs/MAP.md)** — Map layout: river, lanes, nexuses, turrets, jungle pockets (blue top / blue bot), camps, and objectives.
+- **[docs/CHAMPION_AI.md](docs/CHAMPION_AI.md)** — Champion AI spec: actions, scores, roles, lane rules, and attributes.
+- **[docs/README.md](docs/README.md)** — Documentation index.
+
 ## Run Locally
 
 Requires [Node.js](https://nodejs.org/) 24+ (for built-in TypeScript stripping).

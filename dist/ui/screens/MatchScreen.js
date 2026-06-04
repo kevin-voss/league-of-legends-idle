@@ -18,8 +18,11 @@ export function createMatchScreen(match       , speed           , onSpeed       
   shell.className = "match-shell";
 
   const hud = createHUD(match, speed, onSpeed);
+
   const viewport = document.createElement("div");
   viewport.className = "match-viewport";
+  viewport.setAttribute("role", "application");
+  viewport.setAttribute("aria-label", "Summoner's Rift map");
 
   const canvas = document.createElement("canvas");
   canvas.width = CANVAS_WIDTH;

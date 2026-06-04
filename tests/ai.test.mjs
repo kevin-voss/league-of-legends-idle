@@ -24,7 +24,7 @@ function createMatch(rngValue = 0.4) {
 test("the coward: a low-HP champion next to a healthy enemy retreats, not fights", () => {
   const match = createMatch();
   const champ = match.champions.find((c) => c.side === "blue" && c.role === "mid");
-  const enemy = match.champions.find((c) => c.side === "red");
+  const enemy = match.champions.find((c) => c.side === "red" && c.role === "mid");
   assert.ok(champ && enemy);
 
   champ.pos.x = 600;
@@ -50,7 +50,7 @@ test("the coward: a low-HP champion next to a healthy enemy retreats, not fights
 test("the hunter: a healthy champion with minions dives a low-HP enemy", () => {
   const match = createMatch();
   const champ = match.champions.find((c) => c.side === "blue" && c.role === "top");
-  const enemy = match.champions.find((c) => c.side === "red");
+  const enemy = match.champions.find((c) => c.side === "red" && c.role === "top");
   assert.ok(champ && enemy);
 
   champ.pos.x = 600;
@@ -61,9 +61,9 @@ test("the hunter: a healthy champion with minions dives a low-HP enemy", () => {
   enemy.currentHp = enemy.maxHp * 0.2;
 
   // Two allied minions back up the dive.
-  const path = getLanePath("mid", "blue");
-  match.minions.push(new Minion("blue", "mid", "melee", path, 1, { x: 612, y: 360 }));
-  match.minions.push(new Minion("blue", "mid", "caster", path, 1, { x: 622, y: 372 }));
+  const path = getLanePath("top", "blue");
+  match.minions.push(new Minion("blue", "top", "melee", path, 1, { x: 612, y: 360 }));
+  match.minions.push(new Minion("blue", "top", "caster", path, 1, { x: 622, y: 372 }));
 
   match.update(0);
 
@@ -73,6 +73,31 @@ test("the hunter: a healthy champion with minions dives a low-HP enemy", () => {
   assert.ok(attack > farm, `expected attack(${attack}) > farm(${farm})`);
   assert.equal(champ.state, "fighting");
   assert.equal(champ.target, enemy);
+});
+
+test("healthy laners prefer last-hits over trading at high enemy HP", () => {
+  const match = createMatch();
+  const champ = match.champions.find((c) => c.side === "blue" && c.role === "mid");
+  const enemy = match.champions.find((c) => c.side === "red" && c.role === "mid");
+  assert.ok(champ && enemy);
+
+  champ.pos.x = 900;
+  champ.pos.y = 900;
+  champ.currentHp = champ.maxHp;
+  enemy.pos.x = 940;
+  enemy.pos.y = 900;
+  enemy.currentHp = enemy.maxHp;
+
+  const path = getLanePath("mid", "red");
+  const minion = new Minion("red", "mid", "melee", path, 1, { x: 930, y: 900 });
+  match.minions.push(minion);
+  match.update(0);
+
+  const farm = new FarmMinionAction().calculateScore(champ, match);
+  const attack = new AttackChampionAction().calculateScore(champ, match);
+
+  assert.ok(farm > attack, `expected farm(${farm}) > attack(${attack})`);
+  assert.equal(attack, 0);
 });
 
 test("the brain always commits to exactly one action", () => {

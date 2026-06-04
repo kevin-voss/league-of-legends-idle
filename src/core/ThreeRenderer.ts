@@ -7,30 +7,33 @@ import {
   getChampionModelPath,
   getJungleCampModelPath,
   getMinionModelPath,
-  getStructureModelPath,
-  MONSTER_BARON_MODEL,
-  MONSTER_DRAGON_MODEL
+  getStructureModelPath
 } from "../gltf/AssetCatalog.js";
 import { fitModelToFootprint, setModelOpacity } from "../gltf/ModelUtils.js";
-import { logicToWorld } from "./CoordinateMap.js";
+import { logicToWorld, LOGIC_TO_WORLD } from "./CoordinateMap.js";
+import { MapCameraControls } from "./MapCameraControls.js";
 import { ThreeEngine } from "./ThreeEngine.js";
 import type { Match } from "../game/simulation/Match.js";
 import { Minion } from "../game/entities/Minion.js";
 import { Monster } from "../game/entities/Monster.js";
 import { Structure } from "../game/entities/Structure.js";
-import { buildRiftScene } from "../game/map/RiftScene.js";
+import { buildRiftScene, type ObjectiveGuardians } from "../game/map/RiftScene.js";
 import { ChampionVisual } from "../game/visuals/ChampionVisual.js";
 import { WorldHealthBars } from "../ui/components/WorldHealthBars.js";
 
 const SIDE_COLOR = { blue: 0x4aa3df, red: 0xdf6d5f } as const;
 const CHAMPION_WIDTH = 1.55;
 const MINION_WIDTH = 0.46;
-const MONSTER_WIDTH = { camp: 0.88, dragon: 1.05, baron: 1.35 } as const;
+const MONSTER_WIDTH = { camp: 1.12, dragon: 1.72, baron: 2.15 } as const;
 const TOWER_SIZE = 2.2;
 const NEXUS_SIZE = 3.4;
+const TOWER_RANGE_RING_SEGMENTS = 72;
+/** Above hex tiles so the ring is not z-fighting with the ground. */
+const TOWER_RANGE_RING_Y = 0.14;
 
 interface EntityMesh {
   mesh: THREE.Object3D;
+  rangeRing?: THREE.Group;
 }
 
 export class ThreeRenderer {
@@ -43,18 +46,21 @@ export class ThreeRenderer {
   private readonly healthBars: WorldHealthBars;
   private readonly clock = new THREE.Clock();
   private readonly debugOverlay: HTMLElement | null;
+  private cameraControls: MapCameraControls | null = null;
+  private objectiveGuardians: ObjectiveGuardians | null = null;
   private ready = false;
   private frameCount = 0;
 
-  constructor(canvas: HTMLCanvasElement, overlay: HTMLElement, debugOverlay: HTMLElement | null = null) {
+  constructor(canvas: HTMLCanvasElement, overlay: HTMLElement, viewport: HTMLElement, debugOverlay: HTMLElement | null = null) {
     this.engine = new ThreeEngine(canvas);
     this.healthBars = new WorldHealthBars(overlay);
     this.debugOverlay = debugOverlay;
+    this.cameraControls = new MapCameraControls(viewport, this.engine);
   }
 
   async init(match: Match): Promise<void> {
     debugLog("ThreeRenderer", "init start");
-    await buildRiftScene(this.engine.scene, this.assets);
+    this.objectiveGuardians = await buildRiftScene(this.engine.scene, this.assets);
     debugLog("ThreeRenderer", "rift scene built", { children: this.engine.scene.children.length });
     await this.preloadStructureModels();
     debugLog("ThreeRenderer", "structures loaded", { templates: this.structureTemplates.size });
@@ -72,6 +78,7 @@ export class ThreeRenderer {
       }
     }
     debugLog("ThreeRenderer", "structures placed", { count: match.structures.length });
+    this.bindObjectiveGuardians(match);
     this.ready = true;
     this.updateDebugPanel(match, "ready");
     if (isDebugEnabled()) {
@@ -154,6 +161,8 @@ export class ThreeRenderer {
   }
 
   dispose(): void {
+    this.cameraControls?.destroy();
+    this.cameraControls = null;
     this.healthBars.clear();
     for (const visual of this.championVisuals.values()) {
       visual.dispose();
@@ -208,7 +217,13 @@ export class ThreeRenderer {
 
   private syncGenericEntities(match: Match): void {
     const minions = match.minions.filter((minion) => minion.alive || minion.deathTimer > 0);
-    const monsters = match.monsters.filter((monster) => monster.alive || monster.deathTimer > 0);
+    const monsters = match.monsters.filter(
+      (monster) =>
+        monster.monsterType === "dragon" ||
+        monster.monsterType === "baron" ||
+        monster.alive ||
+        monster.deathTimer > 0
+    );
 
     for (const minion of minions) {
       this.syncMinion(minion);
@@ -224,20 +239,34 @@ export class ThreeRenderer {
     this.placeEntity(entry.mesh, minion.pos.x, minion.pos.y, minion.alive, minion.alive ? 1 : 0.35);
   }
 
+  private bindObjectiveGuardians(match: Match): void {
+    if (!this.objectiveGuardians) {
+      return;
+    }
+
+    for (const monster of match.monsters) {
+      if (monster.monsterType !== "dragon" && monster.monsterType !== "baron") {
+        continue;
+      }
+      const guardian = this.objectiveGuardians[monster.monsterType];
+      this.entityMeshes.set(monster.id, { mesh: guardian });
+      this.syncMonster(monster);
+    }
+  }
+
   private syncMonster(monster: Monster): void {
-    const modelPath =
-      monster.monsterType === "dragon"
-        ? MONSTER_DRAGON_MODEL
-        : monster.monsterType === "baron"
-          ? MONSTER_BARON_MODEL
-          : getJungleCampModelPath(monster.campId);
-    const width =
-      monster.monsterType === "baron"
-        ? MONSTER_WIDTH.baron
-        : monster.monsterType === "dragon"
-          ? MONSTER_WIDTH.dragon
-          : MONSTER_WIDTH.camp;
-    const entry = this.ensureSkinnedEntity(monster.id, modelPath, width);
+    const isMajorObjective = monster.monsterType === "dragon" || monster.monsterType === "baron";
+
+    if (isMajorObjective && this.objectiveGuardians) {
+      const guardian = this.objectiveGuardians[monster.monsterType];
+      this.entityMeshes.set(monster.id, { mesh: guardian });
+      guardian.visible = true;
+      setModelOpacity(guardian, monster.alive ? 1 : 0.72);
+      return;
+    }
+
+    const modelPath = getJungleCampModelPath(monster.campId);
+    const entry = this.ensureSkinnedEntity(monster.id, modelPath, MONSTER_WIDTH.camp);
     this.placeEntity(entry.mesh, monster.pos.x, monster.pos.y, monster.alive, monster.alive ? 1 : 0.3);
   }
 
@@ -252,6 +281,11 @@ export class ThreeRenderer {
       const baseScale = (entry.mesh.userData.baseScale as number | undefined) ?? entry.mesh.scale.x;
       entry.mesh.userData.baseScale = baseScale;
       entry.mesh.scale.setScalar(baseScale * (structure.alive ? 1 : 0.82));
+
+      if (entry.rangeRing) {
+        entry.rangeRing.position.set(world.x, TOWER_RANGE_RING_Y, world.z);
+        entry.rangeRing.visible = structure.alive && structure.structureType === "tower";
+      }
     }
   }
 
@@ -332,6 +366,10 @@ export class ThreeRenderer {
     this.engine.scene.add(mesh);
 
     const entry: EntityMesh = { mesh };
+    if (structure.structureType === "tower") {
+      entry.rangeRing = createTowerRangeRing(structure.side as "blue" | "red", structure.attackRange);
+      this.engine.scene.add(entry.rangeRing);
+    }
     this.entityMeshes.set(structure.id, entry);
     return entry;
   }
@@ -357,7 +395,12 @@ export class ThreeRenderer {
     }
 
     for (const monster of match.monsters) {
-      if (monster.alive || monster.deathTimer > 0) {
+      if (
+        monster.monsterType === "dragon" ||
+        monster.monsterType === "baron" ||
+        monster.alive ||
+        monster.deathTimer > 0
+      ) {
         liveIds.add(monster.id);
       }
     }
@@ -370,8 +413,53 @@ export class ThreeRenderer {
       if (this.championVisuals.has(id) || liveIds.has(id)) {
         continue;
       }
+      entry.rangeRing?.removeFromParent();
       entry.mesh.removeFromParent();
       this.entityMeshes.delete(id);
     }
   }
+}
+
+function createTowerRangeRing(side: "blue" | "red", attackRange: number): THREE.Group {
+  const radius = attackRange * LOGIC_TO_WORLD;
+  const strokeColor = side === "blue" ? 0x77b9ff : 0xff8b7d;
+  const fillColor = side === "blue" ? 0x4aa3df : 0xdf6d5f;
+  const group = new THREE.Group();
+  group.name = "tower-range";
+
+  const fill = new THREE.Mesh(
+    new THREE.CircleGeometry(radius, 48),
+    new THREE.MeshBasicMaterial({
+      color: fillColor,
+      transparent: true,
+      opacity: 0.07,
+      depthWrite: false
+    })
+  );
+  fill.rotation.x = -Math.PI / 2;
+  fill.renderOrder = 1;
+  group.add(fill);
+
+  const points: THREE.Vector3[] = [];
+  for (let index = 0; index <= TOWER_RANGE_RING_SEGMENTS; index += 1) {
+    const angle = (index / TOWER_RANGE_RING_SEGMENTS) * Math.PI * 2;
+    points.push(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
+  }
+
+  const outline = new THREE.LineLoop(
+    new THREE.BufferGeometry().setFromPoints(points),
+    new THREE.LineDashedMaterial({
+      color: strokeColor,
+      dashSize: 0.16,
+      gapSize: 0.12,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false
+    })
+  );
+  outline.computeLineDistances();
+  outline.renderOrder = 2;
+  group.add(outline);
+
+  return group;
 }

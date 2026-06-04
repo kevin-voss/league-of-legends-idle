@@ -141,10 +141,43 @@ test("junglers never siege structures or push lane minions", () => {
   assert.equal(laneMinionTargets, 0);
 });
 
+test("laners last-hit enemy minions for gold and creep score", () => {
+  const match = createMatch();
+  const laner = match.champions.find((candidate) => candidate.side === "blue" && candidate.role === "mid");
+  assert.ok(laner);
+
+  for (const champion of match.champions) {
+    if (champion !== laner) {
+      champion.pos.x = 40;
+      champion.pos.y = 40;
+    }
+  }
+
+  laner.pos.x = 900;
+  laner.pos.y = 900;
+  const path = getLanePath("mid", "red");
+  const minion = new Minion("red", "mid", "melee", path, 1, { x: 940, y: 900 });
+  match.minions.push(minion);
+  match.update(0);
+  minion.currentHp = 1;
+
+  assert.equal(match.findTargetForChampion(laner), minion);
+
+  const goldBefore = laner.statsLine.gold;
+  const csBefore = laner.statsLine.creepScore;
+  for (let i = 0; i < 180 && minion.alive; i += 1) {
+    match.update(1 / 30);
+  }
+
+  assert.equal(minion.alive, false);
+  assert.ok(laner.statsLine.creepScore > csBefore);
+  assert.ok(laner.statsLine.gold > goldBefore);
+});
+
 test("winning requires structural progress, not just a clock advantage", () => {
   for (const seed of [0.2, 0.4, 0.6, 0.8]) {
     const match = createMatch(seed);
-    for (let i = 0; i < 12000 && !match.completed; i += 1) {
+    for (let i = 0; i < 15000 && !match.completed; i += 1) {
       match.update(1 / 30);
     }
 

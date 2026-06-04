@@ -63,11 +63,18 @@ export class WorldHealthBars {
     }
 
     for (const monster of monsters) {
-      if (!monster.alive && monster.deathTimer <= 0) {
+      const isMajorObjective = monster.monsterType === "dragon" || monster.monsterType === "baron";
+      if (!monster.alive && monster.deathTimer <= 0 && !isMajorObjective) {
+        continue;
+      }
+      if (isMajorObjective && !monster.alive) {
         continue;
       }
       const meshEntry = entityMeshes.get(monster.id);
-      if (!this.syncMeshBar(engine, live, monster.id, monster.hpPercent, monster.side, meshEntry)) {
+      const barStyle = objectiveBarStyle(monster);
+      if (
+        !this.syncMeshBar(engine, live, monster.id, monster.hpPercent, monster.side, meshEntry, barStyle?.lift, barStyle)
+      ) {
         continue;
       }
     }
@@ -102,16 +109,17 @@ export class WorldHealthBars {
     hpPercent: number,
     side: EntitySide,
     meshEntry: EntityMeshEntry | undefined,
-    lift = 0.18
+    lift = 0.18,
+    style?: ObjectiveBarStyle
   ): boolean {
     if (!meshEntry || meshEntry.mesh.children.length === 0) {
       return false;
     }
 
     live.add(id);
-    const bar = this.ensureBar(id, false);
+    const bar = this.ensureBar(id, false, style);
     const screen = engine.projectToScreen(meshTopAnchor(meshEntry.mesh, lift));
-    this.placeBar(bar, screen, hpPercent, side);
+    this.placeBar(bar, screen, hpPercent, side, undefined, style?.fillColor);
     return true;
   }
 
@@ -120,7 +128,8 @@ export class WorldHealthBars {
     screen: { x: number; y: number; visible: boolean },
     hpPercent: number,
     side: EntitySide,
-    level?: number
+    level?: number,
+    fillColor?: string
   ): void {
     if (!screen.visible) {
       entry.root.style.display = "none";
@@ -131,20 +140,24 @@ export class WorldHealthBars {
     entry.root.style.left = `${screen.x}px`;
     entry.root.style.top = `${screen.y}px`;
     entry.fill.style.width = `${Math.round(Math.max(0, Math.min(1, hpPercent)) * 100)}%`;
-    entry.fill.style.background = fillColorForSide(side);
+    entry.fill.style.background = fillColor ?? fillColorForSide(side);
     if (entry.level && level !== undefined) {
       entry.level.textContent = String(level);
     }
   }
 
-  private ensureBar(id: string, showLevel: boolean): BarEntry {
+  private ensureBar(id: string, showLevel: boolean, style?: ObjectiveBarStyle): BarEntry {
     const existing = this.bars.get(id);
     if (existing) {
       return existing;
     }
 
     const root = document.createElement("div");
-    root.className = showLevel ? "world-health-bar" : "world-health-bar world-health-bar--compact";
+    root.className = showLevel
+      ? "world-health-bar"
+      : style
+        ? "world-health-bar world-health-bar--objective"
+        : "world-health-bar world-health-bar--compact";
 
     const track = document.createElement("div");
     track.className = "world-health-bar__track";
@@ -166,6 +179,21 @@ export class WorldHealthBars {
     this.bars.set(id, entry);
     return entry;
   }
+}
+
+interface ObjectiveBarStyle {
+  lift: number;
+  fillColor: string;
+}
+
+function objectiveBarStyle(monster: Monster): ObjectiveBarStyle | undefined {
+  if (monster.monsterType === "dragon") {
+    return { lift: 0.42, fillColor: "#4aa3df" };
+  }
+  if (monster.monsterType === "baron") {
+    return { lift: 0.5, fillColor: "#a884e8" };
+  }
+  return undefined;
 }
 
 function fillColorForSide(side: EntitySide): string {

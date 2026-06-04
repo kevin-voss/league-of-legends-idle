@@ -22,7 +22,8 @@ export class Monster extends Entity {
 
   constructor(monsterType: MonsterType, name: string, position: Point, activeAt: number, respawnSeconds: number, campId = "") {
     const hp = monsterType === "baron" ? 3200 : monsterType === "dragon" ? 2100 : 760;
-    super("monster", "neutral", position, hp, 0, monsterType === "camp" ? 18 : 30);
+    const radius = monsterType === "baron" ? 38 : monsterType === "dragon" ? 34 : 18;
+    super("monster", "neutral", position, hp, 0, radius);
     this.id = `objective-${monsterType}-${name.toLowerCase().replace(/\s+/g, "-")}`;
     this.monsterType = monsterType;
     this.campId = campId;

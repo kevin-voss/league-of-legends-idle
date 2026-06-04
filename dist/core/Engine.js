@@ -81,7 +81,7 @@ export class Engine {
       clientHeight: canvas.clientHeight
     });
 
-    const renderer = new ThreeRenderer(canvas, worldOverlay, debugOverlay);
+    const renderer = new ThreeRenderer(canvas, worldOverlay, viewport, debugOverlay);
     try {
       await renderer.init(this.match);
     } catch (error) {

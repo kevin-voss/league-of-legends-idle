@@ -1,7 +1,8 @@
+import { MINION_MOVE_SPEED } from "../../data/Constants.js";
+import type { Point, TeamSide } from "../../data/models.js";
+import { calculateAttackPeriod, calculateTypedDamage } from "../combat/DamageCalculator.js";
 import type { Match } from "../simulation/Match.js";
 import { Entity } from "./Entity.js";
-import { calculateAttackPeriod, calculateTypedDamage } from "../combat/DamageCalculator.js";
-import type { Point, TeamSide } from "../../data/models.js";
 
 export type MinionType = "melee" | "caster";
 
@@ -20,8 +21,7 @@ export class Minion extends Entity {
 
   constructor(side: TeamSide, lane: "top" | "mid" | "bot", type: MinionType, path: Point[], waveNumber: number, offset: Point) {
     const hp = type === "melee" ? 270 + waveNumber * 8 : 190 + waveNumber * 6;
-    const speed = type === "melee" ? 72 : 68;
-    super("minion", side, offset, hp, speed, type === "melee" ? 11 : 9);
+    super("minion", side, offset, hp, MINION_MOVE_SPEED, type === "melee" ? 11 : 9);
     this.lane = lane;
     this.type = type;
     this.path = path;

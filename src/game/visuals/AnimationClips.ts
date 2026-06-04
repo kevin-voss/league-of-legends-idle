@@ -1,11 +1,12 @@
 import type { AnimationClip } from "three";
 import type { ChampionAIState } from "../../data/models.js";
 
-const IDLE_NAMES = ["Idle", "Idle_A", "Idle_B"];
-const WALK_NAMES = ["Walk", "Walk_A", "Run", "Run_A"];
-const ATTACK_NAMES = ["Attack", "Attack_A", "Melee_Attack", "Hit_A", "Hit"];
+const IDLE_NAMES = ["Idle_A", "Idle_B", "Idle"];
+const WALK_NAMES = ["Walking_A", "Walking_B", "Running_A", "Running_B", "Walk", "Run"];
+/** Short general clips; played partially and time-scaled to match auto-attack cadence. */
+const ATTACK_NAMES = ["Interact", "Throw", "Hit_A", "Hit_B"];
 
-export function pickClip(clips: AnimationClip[], names: string[]): AnimationClip | null {
+export function pickClip(clips: AnimationClip[], names: string[], allowFallback = true): AnimationClip | null {
   for (const name of names) {
     const exact = clips.find((clip) => clip.name === name);
     if (exact) {
@@ -16,14 +17,12 @@ export function pickClip(clips: AnimationClip[], names: string[]): AnimationClip
       return partial;
     }
   }
-  return clips[0] ?? null;
+  return allowFallback ? (clips[0] ?? null) : null;
 }
 
-export function resolveChampionAnimState(state: ChampionAIState): "idle" | "walk" | "attack" {
-  if (state === "fighting" || state === "sieging") {
-    return "attack";
-  }
+export function resolveChampionAnimState(state: ChampionAIState, moving: boolean): "idle" | "walk" {
   if (
+    moving ||
     state === "movingToLane" ||
     state === "rotating" ||
     state === "movingToObjective" ||
@@ -37,7 +36,7 @@ export function resolveChampionAnimState(state: ChampionAIState): "idle" | "walk
 
 export function clipsForState(clips: AnimationClip[], anim: "idle" | "walk" | "attack"): AnimationClip | null {
   if (anim === "attack") {
-    return pickClip(clips, ATTACK_NAMES);
+    return pickClip(clips, ATTACK_NAMES, false);
   }
   if (anim === "walk") {
     return pickClip(clips, WALK_NAMES);

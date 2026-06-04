@@ -15,9 +15,7 @@ import { FarmMinionAction } from "./actions/FarmMinionAction.js";
 
 /**
  * Utility AI: every tick each action scores the champion's situation and the
- * highest scorer runs. This replaces a rigid state machine with fluid,
- * stat-driven decisions — a hurt, wealthy champion recalls; a healthy one with
- * backup dives; a lone laner farms and falls back as it gets pressured.
+ * highest scorer runs. Spec: docs/CHAMPION_AI.md
  *
  * Actions are stateless, so a single shared brain serves every champion.
  */

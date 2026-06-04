@@ -14,7 +14,7 @@ import {
   KILL_BUFF_BONUS,
   KILL_BUFF_DURATION,
   MATCH_MAX_SECONDS,
-  MATCH_MIN_SECONDS,
+  MATCH_OVERTIME_SECONDS,
   ROLES,
   TIER_ORDER,
   WAVE_INTERVAL_SECONDS,
@@ -38,6 +38,7 @@ import { Structure } from "../entities/Structure.js";
 import { RiftMap } from "../map/RiftMap.js";
 import { Spawner } from "../map/Spawner.js";
 import type { MatchContext } from "../ai/MatchContext.js";
+import { canChampionsDuel, championBelongsToLane, championHomeLane } from "../combat/LaneCombatRules.js";
 
 export interface FloatingText {
   pos: Vector2;
@@ -146,7 +147,6 @@ export class Match implements MatchContext {
       structure.update(this, dt);
     }
 
-    this.applyStrategicPressure(dt);
     this.updateVFX(dt);
     this.cleanupEntities();
     this.updateStructureLocks();
@@ -154,6 +154,9 @@ export class Match implements MatchContext {
     this.checkCompletion();
 
     if (!this.completed && this.elapsedSeconds >= MATCH_MAX_SECONDS) {
+      if (!this.hasStructuralProgress() && this.elapsedSeconds < MATCH_MAX_SECONDS + MATCH_OVERTIME_SECONDS) {
+        return;
+      }
       this.finish(this.decideTimeoutWinner());
     }
   }
@@ -307,12 +310,21 @@ export class Match implements MatchContext {
   }
 
   findTargetForChampion(champion: Champion): Entity | null {
-    const radius = champion.role === "adc" || champion.role === "mid" ? 285 : champion.role === "support" ? 245 : 220;
+    if (champion.role === "jungle") {
+      const enemySide = getEnemySide(champion.side);
+      const enemyJungler = this.targetCache.champions[enemySide]
+        .filter((candidate) => candidate.alive && candidate.state !== "backing" && candidate.role === "jungle")
+        .filter((candidate) => champion.distanceTo(candidate) <= 220)
+        .sort((a, b) => champion.distanceTo(a) - champion.distanceTo(b));
+      return enemyJungler[0] ?? null;
+    }
+
+    const radius = champion.role === "adc" || champion.role === "mid" ? 360 : champion.role === "support" ? 320 : 300;
     const enemySide = getEnemySide(champion.side);
     const lane = this.getChampionLane(champion);
     const enemyChampions = this.targetCache.champions[enemySide]
       .filter((candidate) => candidate.alive && candidate.state !== "backing")
-      .filter((candidate) => candidate.role === "jungle" || this.getChampionLane(candidate) === lane);
+      .filter((candidate) => canChampionsDuel(champion, candidate));
     const enemyMinions = this.targetCache.minions[enemySide]
       .filter((candidate) => candidate.alive)
       .filter((candidate) => candidate.lane === lane);
@@ -335,7 +347,9 @@ export class Match implements MatchContext {
     const enemies: Entity[] = [
       ...this.targetCache.minions[enemySide].filter((candidate) => candidate.alive && candidate.lane === minion.lane),
       ...(laneGate ? [laneGate] : []),
-      ...this.targetCache.champions[enemySide].filter((candidate) => candidate.alive && candidate.state !== "backing")
+      ...this.targetCache.champions[enemySide]
+        .filter((candidate) => candidate.alive && candidate.state !== "backing")
+        .filter((candidate) => candidate.role !== "jungle" && championHomeLane(candidate) === minion.lane)
     ];
     const inRange = enemies.filter((candidate) => minion.distanceTo(candidate) <= 170);
     inRange.sort((a, b) => {
@@ -381,13 +395,17 @@ export class Match implements MatchContext {
   }
 
   hasEnemyChampionNear(champion: Champion, radius: number): boolean {
-    return this.findChampionNear(champion.pos, champion.side, radius) !== null;
+    return this.getLaneOpponentInRange(champion, radius) !== null;
   }
 
   getEnemyChampionsInRange(champion: Champion, range: number): Champion[] {
     const enemySide = getEnemySide(champion.side as TeamSide);
     return this.targetCache.champions[enemySide].filter(
-      (candidate) => candidate.alive && candidate.state !== "backing" && champion.distanceTo(candidate) <= range
+      (candidate) =>
+        candidate.alive &&
+        candidate.state !== "backing" &&
+        canChampionsDuel(champion, candidate) &&
+        champion.distanceTo(candidate) <= range
     );
   }
 
@@ -399,15 +417,22 @@ export class Match implements MatchContext {
   }
 
   getAlliedMinionsInRange(champion: Champion, range: number): Minion[] {
+    const lane = this.getChampionLane(champion);
     return this.targetCache.minions[champion.side as TeamSide].filter(
-      (minion) => minion.alive && champion.distanceTo(minion) <= range
+      (minion) => minion.alive && minion.lane === lane && champion.distanceTo(minion) <= range
     );
   }
 
   getNearestEnemyChampion(champion: Champion): Champion | null {
+    return this.getLaneOpponentInRange(champion, Number.POSITIVE_INFINITY);
+  }
+
+  getLaneOpponentInRange(champion: Champion, range: number): Champion | null {
     const enemySide = getEnemySide(champion.side as TeamSide);
     const candidates = this.targetCache.champions[enemySide]
       .filter((candidate) => candidate.alive && candidate.state !== "backing")
+      .filter((candidate) => canChampionsDuel(champion, candidate))
+      .filter((candidate) => champion.distanceTo(candidate) <= range)
       .sort((a, b) => champion.distanceTo(a) - champion.distanceTo(b));
     return candidates[0] ?? null;
   }
@@ -664,7 +689,6 @@ export class Match implements MatchContext {
 
       if (target.monsterType === "dragon") {
         this.dragonKills[killerSide] += 1;
-        this.applyObjectivePressure(killerSide, 260);
         this.grantTeamXp(killerSide, XP_PER_DRAGON);
         // Dragons leave a permanent, stacking power buff for the whole team.
         this.grantTeamBuff(killerSide, "dragon", this.dragonKills[killerSide] * DRAGON_BUFF_BONUS, Number.POSITIVE_INFINITY);
@@ -673,7 +697,6 @@ export class Match implements MatchContext {
 
       if (target.monsterType === "baron") {
         this.baronKills[killerSide] += 1;
-        this.applyObjectivePressure(killerSide, 520);
         this.grantTeamXp(killerSide, XP_PER_BARON);
         // Baron is a strong but temporary team-wide buff.
         this.grantTeamBuff(killerSide, "baron", BARON_BUFF_BONUS, BARON_BUFF_DURATION);
@@ -707,7 +730,7 @@ export class Match implements MatchContext {
 
   private assignLaneCommit(attackingTeam: TeamSide, defendingTeam: TeamSide, openedLane: LaneId): void {
     for (const champion of this.champions) {
-      if (!champion.alive) {
+      if (!champion.alive || !championBelongsToLane(champion, openedLane)) {
         continue;
       }
 
@@ -720,7 +743,7 @@ export class Match implements MatchContext {
         champion.assignRotation(openedLane, "defend");
       }
     }
-    this.pushEvent(`${attackingTeam} groups ${openedLane}; ${defendingTeam} defends`);
+    this.pushEvent(`${attackingTeam} pushes ${openedLane}; ${defendingTeam} ${openedLane} defends`);
   }
 
   private canChampionAttackStructure(champion: Champion, structure: Structure): boolean {
@@ -731,7 +754,7 @@ export class Match implements MatchContext {
   }
 
   private getChampionLane(champion: Champion): LaneId {
-    return champion.rotationLane ?? getRoleLane(champion.role);
+    return championHomeLane(champion) ?? getRoleLane(champion.role);
   }
 
   private getNearestPathIndex(point: Point, path: Point[]): number {
@@ -760,8 +783,25 @@ export class Match implements MatchContext {
     return 0;
   }
 
+  findNearestEnemyMinionInLane(champion: Champion, radius: number): Minion | null {
+    if (champion.role === "jungle") {
+      return null;
+    }
+
+    const lane = this.getChampionLane(champion);
+    const enemySide = getEnemySide(champion.side);
+    const candidates = this.targetCache.minions[enemySide]
+      .filter((minion) => minion.alive && minion.lane === lane)
+      .filter((minion) => champion.distanceTo(minion) <= radius)
+      .sort((a, b) => champion.distanceTo(a) - champion.distanceTo(b));
+    return candidates[0] ?? null;
+  }
+
   private scoreTarget(champion: Champion, target: Entity): number {
     const distance = champion.distanceTo(target);
+    if (target instanceof Minion) {
+      return distance - 120;
+    }
     if (target instanceof Champion) {
       const fightBias = champion.role === "jungle" || champion.role === "support" ? -115 : -42;
       const lowHpBias = (1 - target.hpPercent) * -130;
@@ -771,7 +811,7 @@ export class Match implements MatchContext {
       const objectiveBias = target.structureType === "nexus" ? -92 : -48;
       return distance + objectiveBias + (1 - target.hpPercent) * -80;
     }
-    return distance + (champion.role === "adc" || champion.role === "mid" || champion.role === "top" ? -22 : 12);
+    return distance;
   }
 
   private spawnDamageVFX(attacker: Entity, target: Entity, amount: number, damageType: DamageType, source: string): void {
@@ -813,81 +853,11 @@ export class Match implements MatchContext {
     this.minions = this.minions.filter((minion) => !minion.remove);
   }
 
-  private applyStrategicPressure(dt: number): void {
-    if (this.elapsedSeconds < MATCH_MIN_SECONDS) {
-      return;
+  private hasStructuralProgress(): boolean {
+    if (this.baseHp.blue < BASE_MAX_HP || this.baseHp.red < BASE_MAX_HP) {
+      return true;
     }
-
-    const bluePressure = this.getPressure("blue");
-    const redPressure = this.getPressure("red");
-    const blueAdvantage = Math.max(0, bluePressure - redPressure * 0.64);
-    const redAdvantage = Math.max(0, redPressure - bluePressure * 0.64);
-    this.applyLanePressure("blue", blueAdvantage, dt);
-    this.applyLanePressure("red", redAdvantage, dt);
-  }
-
-  private getPressure(side: TeamSide): number {
-    const alivePower = this.champions
-      .filter((champion) => champion.side === side && champion.alive)
-      .reduce((total, champion) => total + champion.stats.ad + champion.stats.ap * 0.72 + champion.matchLevel * 10, 0);
-    const minionPower = this.minions.filter((minion) => minion.side === side && minion.alive).length * 8;
-    const objectivePower = this.dragonKills[side] * 85 + this.baronKills[side] * 180;
-    return alivePower + minionPower + objectivePower;
-  }
-
-  private applyLanePressure(attackerSide: TeamSide, pressure: number, dt: number): void {
-    if (pressure <= 0) {
-      return;
-    }
-
-    const damage = pressure * dt * 0.24;
-    for (const lane of LANES) {
-      const target = this.getAttackableStructureForLane(attackerSide, lane);
-      if (!target || !target.alive || target.isInvulnerable || target.structureType === "nexus") {
-        continue;
-      }
-
-      if (!this.hasAlliedMinionInStructureRange(attackerSide, target)) {
-        continue;
-      }
-
-      const applied = target.takeDamage(damage);
-      if (applied <= 0) {
-        continue;
-      }
-
-      if (!target.alive) {
-        this.handleKill(this.getPressureSource(attackerSide), target);
-        if (this.completed) {
-          return;
-        }
-      }
-    }
-  }
-
-  private applyObjectivePressure(attackerSide: TeamSide, amount: number): void {
-    const source = this.getPressureSource(attackerSide);
-    for (const lane of LANES) {
-      const target = this.getAttackableStructureForLane(attackerSide, lane);
-      if (!target || !target.alive || target.isInvulnerable || target.structureType === "nexus") {
-        continue;
-      }
-
-      target.takeDamage(amount);
-      if (!target.alive) {
-        this.handleKill(source, target);
-        if (this.completed) {
-          return;
-        }
-      }
-    }
-  }
-
-  private getPressureSource(side: TeamSide): Entity {
-    const liveChampion = this.champions.find((champion) => champion.side === side && champion.alive);
-    const nexus = this.getNexus(side);
-    const fallbackChampion = this.champions.find((champion) => champion.side === side);
-    return (liveChampion ?? nexus ?? fallbackChampion) as Entity;
+    return this.enemyTowersDestroyed("blue") > 0 || this.enemyTowersDestroyed("red") > 0;
   }
 
   private refreshTargetCache(): void {
@@ -978,14 +948,21 @@ export class Match implements MatchContext {
   // nexus damage comes first (it only happens after towers fall), then towers taken,
   // then the broader score, so you cannot win without breaking anything.
   private decideTimeoutWinner(): TeamSide {
-    if (this.baseHp.blue !== this.baseHp.red) {
-      return this.baseHp.red < this.baseHp.blue ? "blue" : "red";
+    if (this.baseHp.blue <= 0) {
+      return "red";
+    }
+    if (this.baseHp.red <= 0) {
+      return "blue";
     }
 
     const blueTowers = this.enemyTowersDestroyed("blue");
     const redTowers = this.enemyTowersDestroyed("red");
     if (blueTowers !== redTowers) {
       return blueTowers > redTowers ? "blue" : "red";
+    }
+
+    if (this.baseHp.blue !== this.baseHp.red) {
+      return this.baseHp.red < this.baseHp.blue ? "blue" : "red";
     }
 
     const blueStructureDamage = this.getStructureDamageDealt("blue");

@@ -22,14 +22,19 @@ test("AssetCatalog paths resolve to files under src/assets", async () => {
     ...catalog.getAllStructureModelPaths(),
     catalog.KAYKIT_ATLAS,
     catalog.HEX_GRASS_TILE,
+    catalog.HEX_WATER_TILE,
+    ...catalog.RIVER_STRAIGHT_TILES,
     catalog.ANIM_MOVEMENT,
     catalog.ANIM_GENERAL,
     catalog.SKELETON_ANIM_MOVEMENT,
     catalog.SKELETON_ANIM_GENERAL,
     ...catalog.MEDIEVAL_NATURE_FALLBACK.trees,
     ...catalog.JUNGLE_CAMP_RING_PROPS,
+    catalog.OBJECTIVE_BASE_PROPS.dragon,
+    catalog.OBJECTIVE_BASE_PROPS.baron,
     catalog.OBJECTIVE_MARKER_PROPS.dragon,
     catalog.OBJECTIVE_MARKER_PROPS.baron,
+    ...catalog.OBJECTIVE_RING_PROPS,
     ...Object.values(catalog.LANE_PATH_TILES)
   ];
 

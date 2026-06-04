@@ -1,42 +1,47 @@
                                                            
+import { buildChampionSituation, shouldPrioritizeLastHit } from "../ChampionSituation.js";
                                            
                                                        
-import { THREAT_RADIUS, TOWER_DIVE_RETREAT_SCORE } from "../AiTuning.js";
+import { TOWER_DIVE_RETREAT_SCORE } from "../AiTuning.js";
+import { getRoleProfile } from "../RoleProfiles.js";
 
 /**
- * Fall back to safety without a full recall. Two triggers:
- *  1. Tower-dive avoidance — standing in an enemy tower's range with no allied
- *     minions to soak the shots.
- *  2. Being outnumbered or outmatched by nearby enemy champions, scaled by how
- *     hurt the champion is (full-HP champions hold their ground).
+ * Short backoff from tower dive or losing fights.
+ * @see docs/CHAMPION_AI.md — Retreat
  */
 export class RetreatAction                   {
            name = "RETREAT";
 
   calculateScore(champion          , context              )         {
+    if (champion.role === "jungle") {
+      return 0;
+    }
+
+    const situation = buildChampionSituation(champion, context);
+    const sensitivity = getRoleProfile(champion.role).retreatSensitivity;
     let score = 0;
 
-    const divingTower = context.getUnsafeEnemyTowerForChampion(champion);
-    if (divingTower && !context.hasAlliedMinionInStructureRange(champion.side                  , divingTower)) {
+    if (situation.isTowerDiving && !situation.canTankTower) {
       score = Math.max(score, TOWER_DIVE_RETREAT_SCORE);
     }
 
-    const enemies = context.getEnemyChampionsInRange(champion, THREAT_RADIUS);
-    if (enemies.length > 0) {
-      const allies = context.getAllyChampionsInRange(champion, THREAT_RADIUS);
-      // allies excludes self, so subtract one more to account for the champion itself.
-      const outnumber = Math.max(0, enemies.length - (allies.length + 1));
-      const fear = 1 - champion.hpPercent;
+    if (shouldPrioritizeLastHit(situation)) {
+      return score * sensitivity;
+    }
 
-      let threatScore = outnumber * 45 + fear * 70;
-      // Even a lone enemy is dangerous when you are already hurt.
-      if (enemies.length > allies.length) {
-        threatScore += fear * 25;
+    if (situation.enemiesInEngageRange.length > 0) {
+      const fear = 1 - situation.hpPercent;
+      let threatScore = situation.outnumbered * 45 + fear * 55;
+      if (situation.outnumbered > 0) {
+        threatScore += fear * 30;
+      }
+      if (situation.hpPercent < 0.2) {
+        threatScore += 40;
       }
       score = Math.max(score, threatScore);
     }
 
-    return score;
+    return score * sensitivity;
   }
 
   execute(champion          , context              , dt        )       {

@@ -1,6 +1,5 @@
 import { CANVAS_HEIGHT, CANVAS_WIDTH, TIER_COLOR } from "../data/Constants.js";
-import { JUNGLE_BLOB_CENTERS } from "../data/MapData.js";
-import { BASE_POSITIONS, getLanePath, JUNGLE_CAMPS, JUNGLE_PATHS, OBJECTIVE_POSITIONS } from "../data/MapData.js";
+import { BASE_POSITIONS, getLanePath, JUNGLE_CAMPS, JUNGLE_PATHS, JUNGLE_QUADRANT_CENTERS, OBJECTIVE_POSITIONS } from "../data/MapData.js";
                                                                  
 import { Iso } from "./Isometric.js";
 import { Champion } from "../game/entities/Champion.js";
@@ -166,14 +165,14 @@ export class Renderer {
 
           drawJungleBlob(side          )       {
     const ctx = this.ctx;
-    const centers = JUNGLE_BLOB_CENTERS[side];
+    const centers = [JUNGLE_QUADRANT_CENTERS[side].top, JUNGLE_QUADRANT_CENTERS[side].bot];
     ctx.save();
-    ctx.globalAlpha = 0.22;
+    ctx.globalAlpha = 0.2;
     ctx.fillStyle = side === "blue" ? "#2d6a47" : "#70413a";
     for (const center of centers) {
       const screen = this.project(center);
       ctx.beginPath();
-      ctx.ellipse(screen.x, screen.y, 150 * this.scale, 75 * this.scale, 0, 0, Math.PI * 2);
+      ctx.ellipse(screen.x, screen.y, 88 * this.scale, 44 * this.scale, 0, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
@@ -204,17 +203,28 @@ export class Renderer {
     ctx.restore();
   }
 
-          drawCampMarker(camp                                        , color        )       {
+          drawCampMarker(camp                                             , color        )       {
     const ctx = this.ctx;
     const screen = this.project(camp);
     ctx.save();
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.34;
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 5]);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.28;
     ctx.beginPath();
-    ctx.ellipse(screen.x, screen.y, 26 * this.scale, 13 * this.scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(screen.x, screen.y, 44 * this.scale, 22 * this.scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.72;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.ellipse(screen.x, screen.y, 44 * this.scale, 22 * this.scale, 0, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = "#f6f1df";
+    ctx.font = `bold ${11 * this.scale}px sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(camp.shortName, screen.x, screen.y);
     ctx.restore();
   }
 
@@ -222,11 +232,16 @@ export class Renderer {
     const ctx = this.ctx;
     const screen = this.project(point);
     ctx.save();
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.42;
-    ctx.lineWidth = 2;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.14;
     ctx.beginPath();
-    ctx.ellipse(screen.x, screen.y, 42 * this.scale, 21 * this.scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(screen.x, screen.y, 52 * this.scale, 26 * this.scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.ellipse(screen.x, screen.y, 52 * this.scale, 26 * this.scale, 0, 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = color;
@@ -271,7 +286,13 @@ export class Renderer {
     ctx.restore();
   }
 
-          drawGroundRing(pos       , radius        , tone                                                  , filled         )       {
+          drawGroundRing(
+    pos       ,
+    radius        ,
+    tone                                                  ,
+    filled         ,
+    dashed = false
+  )       {
     const ctx = this.ctx;
     const screen = this.project(pos);
     const palette = {
@@ -288,8 +309,14 @@ export class Renderer {
       ctx.fill();
     }
     ctx.strokeStyle = palette.stroke;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = dashed ? 1.5 : 1;
+    if (dashed) {
+      ctx.setLineDash([6, 5]);
+    }
     ctx.stroke();
+    if (dashed) {
+      ctx.setLineDash([]);
+    }
     ctx.restore();
   }
 
@@ -326,7 +353,7 @@ export class Renderer {
 
     ctx.save();
     if (tower.alive) {
-      this.drawGroundRing(tower.pos, tower.attackRange, tower.side === "blue" ? "blue" : "red", true);
+      this.drawGroundRing(tower.pos, tower.attackRange, tower.side === "blue" ? "blue" : "red", true, true);
     }
     this.drawShadow(tower.pos, 26, 0.34);
 

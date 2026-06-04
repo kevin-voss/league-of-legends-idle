@@ -6,6 +6,17 @@ export const MEDIEVAL = "/game-assets/KayKit_Medieval_Hexagon_Pack_1.0_FREE";
 
 export const KAYKIT_ATLAS = `${MEDIEVAL}/Assets/fbx/tiles/base/hexagons_medieval.png`;
 export const HEX_GRASS_TILE = `${MEDIEVAL}/Assets/fbx/tiles/base/hex_grass.fbx`;
+export const HEX_WATER_TILE = `${MEDIEVAL}/Assets/fbx/tiles/base/hex_water.fbx`;
+
+/** Straight / fill tiles along the rift river (see RIVER_PATH in MapData). */
+export const RIVER_STRAIGHT_TILES = [
+  HEX_WATER_TILE,
+  `${MEDIEVAL}/Assets/fbx/tiles/rivers/hex_river_A.fbx`,
+  `${MEDIEVAL}/Assets/fbx/tiles/rivers/hex_river_B.fbx`,
+  `${MEDIEVAL}/Assets/fbx/tiles/rivers/hex_river_C.fbx`
+] as const;
+
+export const RIVER_CORNER_TILE = `${MEDIEVAL}/Assets/fbx/tiles/rivers/hex_river_crossing_A.fbx`;
 
 /** Flat/contrasting KayKit hex tiles per lane (sloped tiles read as invisible next to grass). */
 export const LANE_PATH_TILES: Record<"top" | "mid" | "bot", string> = {
@@ -122,10 +133,25 @@ export const JUNGLE_CAMP_RING_PROPS = [
   `${MEDIEVAL_PROP}/crate_B_small.fbx`
 ] as const;
 
-export const OBJECTIVE_MARKER_PROPS = {
-  dragon: `${MEDIEVAL_NATURE}/mountain_A_grass.fbx`,
-  baron: `${MEDIEVAL_NATURE}/mountain_B_grass.fbx`
+/** Raised platform under each major objective landmark. */
+export const OBJECTIVE_BASE_PROPS = {
+  dragon: `${MEDIEVAL_NATURE}/hills_B.fbx`,
+  baron: `${MEDIEVAL_NATURE}/hills_C.fbx`
 } as const;
+
+/** Large landmark meshes at dragon / baron pits (trees variant reads clearly on the rift). */
+export const OBJECTIVE_MARKER_PROPS = {
+  dragon: `${MEDIEVAL_NATURE}/mountain_A_grass_trees.fbx`,
+  baron: `${MEDIEVAL_NATURE}/mountain_C_grass_trees.fbx`
+} as const;
+
+/** Rock ring around each major objective pit. */
+export const OBJECTIVE_RING_PROPS = [
+  `${MEDIEVAL_NATURE}/rock_single_A.fbx`,
+  `${MEDIEVAL_NATURE}/rock_single_B.fbx`,
+  `${MEDIEVAL_NATURE}/rock_single_C.fbx`,
+  `${MEDIEVAL_NATURE}/rock_single_D.fbx`
+] as const;
 
 export function getJungleCampCenterProp(campId: string): string {
   return JUNGLE_CAMP_CENTER_PROP[campId] ?? `${MEDIEVAL_PROP}/resource_stone.fbx`;

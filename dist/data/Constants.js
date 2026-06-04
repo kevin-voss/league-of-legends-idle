@@ -13,6 +13,11 @@ export const FIXED_DT_SECONDS = TICK_RATE / 1000;
 export const MATCH_MIN_SECONDS = 135;
 export const MATCH_MAX_SECONDS = 270;
 export const WAVE_INTERVAL_SECONDS = 30;
+/** Extra minions added to each lane wave (on top of the default 3 melee + 1 caster). */
+export const MINIONS_PER_WAVE_EXTRA = 3;
+/** Lane minions move at the same pace as laners (~95 MS baseline). */
+export const MINION_MOVE_SPEED = 95;
+export const MATCH_OVERTIME_SECONDS = 90;
 export const BACK_CHANNEL_SECONDS = 3;
 
 export const BASE_MAX_HP = 5200;

@@ -2,20 +2,30 @@ import * as THREE from "three";
 import { debugLog } from "./DebugLog.js";
 import { WORLD_MAP_CENTER_X, WORLD_MAP_CENTER_Z, WORLD_MAP_HEIGHT, WORLD_MAP_WIDTH } from "./CoordinateMap.js";
 
+const MIN_ZOOM = 0.45;
+const MAX_ZOOM = 2.75;
+
 export class ThreeEngine {
   readonly scene: THREE.Scene;
   readonly camera: THREE.OrthographicCamera;
   readonly renderer: THREE.WebGLRenderer;
   private readonly resizeObserver: ResizeObserver | null;
+  private readonly baseFrustum: number;
+  private readonly lookOffset = new THREE.Vector3(14, 18, 14);
+  private readonly unprojectA = new THREE.Vector3();
+  private readonly unprojectB = new THREE.Vector3();
+  private zoom = 1;
+  private panX = 0;
+  private panZ = 0;
+  private aspect = 1;
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x1a2420);
 
-    const frustum = Math.max(WORLD_MAP_WIDTH, WORLD_MAP_HEIGHT) * 0.58;
-    this.camera = new THREE.OrthographicCamera(-frustum, frustum, frustum, -frustum, 0.1, 200);
-    this.camera.position.set(WORLD_MAP_CENTER_X + 14, 18, WORLD_MAP_CENTER_Z + 14);
-    this.camera.lookAt(WORLD_MAP_CENTER_X, 0, WORLD_MAP_CENTER_Z);
+    this.baseFrustum = Math.max(WORLD_MAP_WIDTH, WORLD_MAP_HEIGHT) * 0.58;
+    this.camera = new THREE.OrthographicCamera(-this.baseFrustum, this.baseFrustum, this.baseFrustum, -this.baseFrustum, 0.1, 200);
+    this.applyCameraTransform();
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -29,7 +39,7 @@ export class ThreeEngine {
     this.resizeObserver?.observe(canvas.parentElement ?? canvas);
     this.resize(canvas);
     debugLog("ThreeEngine", "initialized", {
-      frustum: Math.max(WORLD_MAP_WIDTH, WORLD_MAP_HEIGHT) * 0.58,
+      frustum: this.baseFrustum,
       camera: this.camera.position.toArray()
     });
   }
@@ -62,14 +72,76 @@ export class ThreeEngine {
     const height = parent?.clientHeight ?? canvas.clientHeight ?? width;
     this.renderer.setSize(width, height, false);
 
-    const aspect = width / Math.max(height, 1);
-    const frustum = Math.max(WORLD_MAP_WIDTH, WORLD_MAP_HEIGHT) * 0.58;
-    this.camera.left = -frustum * aspect;
-    this.camera.right = frustum * aspect;
+    this.aspect = width / Math.max(height, 1);
+    this.applyProjection();
+    debugLog("ThreeEngine", "resize", { width, height, aspect: this.aspect });
+  }
+
+  zoomBy(factor: number, anchorX: number, anchorY: number, viewWidth: number, viewHeight: number): void {
+    const nextZoom = THREE.MathUtils.clamp(this.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+    if (nextZoom === this.zoom) {
+      return;
+    }
+
+    const worldBefore = this.screenToGround(anchorX, anchorY, viewWidth, viewHeight);
+    this.zoom = nextZoom;
+    this.applyProjection();
+    const worldAfter = this.screenToGround(anchorX, anchorY, viewWidth, viewHeight);
+    this.panX += worldBefore.x - worldAfter.x;
+    this.panZ += worldBefore.z - worldAfter.z;
+    this.applyCameraTransform();
+  }
+
+  panScreenDelta(deltaX: number, deltaY: number, viewWidth: number, viewHeight: number): void {
+    const before = this.screenToGround(viewWidth * 0.5, viewHeight * 0.5, viewWidth, viewHeight);
+    const after = this.screenToGround(
+      viewWidth * 0.5 + deltaX,
+      viewHeight * 0.5 + deltaY,
+      viewWidth,
+      viewHeight
+    );
+    this.panX += before.x - after.x;
+    this.panZ += before.z - after.z;
+    this.applyCameraTransform();
+  }
+
+  resetCamera(): void {
+    this.zoom = 1;
+    this.panX = 0;
+    this.panZ = 0;
+    this.applyProjection();
+    this.applyCameraTransform();
+  }
+
+  private screenToGround(screenX: number, screenY: number, viewWidth: number, viewHeight: number): THREE.Vector3 {
+    const ndcX = (screenX / Math.max(viewWidth, 1)) * 2 - 1;
+    const ndcY = 1 - (screenY / Math.max(viewHeight, 1)) * 2;
+    this.unprojectA.set(ndcX, ndcY, 0).unproject(this.camera);
+    this.unprojectB.set(ndcX, ndcY, 1).unproject(this.camera);
+    const dir = this.unprojectB.sub(this.unprojectA);
+    const t = Math.abs(dir.y) < 0.0001 ? 0 : -this.unprojectA.y / dir.y;
+    return this.unprojectA.clone().addScaledVector(dir, t);
+  }
+
+  private applyProjection(): void {
+    const frustum = this.baseFrustum / this.zoom;
+    this.camera.left = -frustum * this.aspect;
+    this.camera.right = frustum * this.aspect;
     this.camera.top = frustum;
     this.camera.bottom = -frustum;
     this.camera.updateProjectionMatrix();
-    debugLog("ThreeEngine", "resize", { width, height, aspect });
+  }
+
+  private applyCameraTransform(): void {
+    const focusX = WORLD_MAP_CENTER_X + this.panX;
+    const focusZ = WORLD_MAP_CENTER_Z + this.panZ;
+    this.camera.position.set(
+      focusX + this.lookOffset.x,
+      this.lookOffset.y,
+      focusZ + this.lookOffset.z
+    );
+    this.camera.lookAt(focusX, 0, focusZ);
+    this.camera.updateMatrixWorld();
   }
 
   projectToScreen(world: THREE.Vector3): { x: number; y: number; visible: boolean } {

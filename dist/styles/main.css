@@ -300,6 +300,9 @@ button:disabled {
 }
 
 .match-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   min-height: 100vh;
   padding: 16px;
   background: #111611;
@@ -307,14 +310,21 @@ button:disabled {
 
 .match-viewport {
   position: relative;
+  flex: 1;
   width: min(100%, 1920px);
   margin: 0 auto;
-  aspect-ratio: 1 / 1;
+  min-height: clamp(280px, 58vh, 920px);
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
   background: #172018;
   box-shadow: 0 24px 70px var(--shadow);
+  touch-action: none;
+  cursor: grab;
+}
+
+.match-viewport.is-panning {
+  cursor: grabbing;
 }
 
 .match-viewport.is-loading::after {
@@ -390,6 +400,16 @@ button:disabled {
 
 .world-health-bar--compact .world-health-bar__track {
   height: 4px;
+}
+
+.world-health-bar--objective {
+  min-width: 84px;
+}
+
+.world-health-bar--objective .world-health-bar__track {
+  height: 8px;
+  border-radius: 4px;
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .world-health-bar__level {
@@ -531,8 +551,11 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .match-viewport {
+    min-height: clamp(240px, 42vh, 560px);
+  }
+
   .hud-scoreboard,
-  .hud-team,
   .hud-center {
     grid-template-columns: repeat(2, minmax(120px, 1fr));
   }

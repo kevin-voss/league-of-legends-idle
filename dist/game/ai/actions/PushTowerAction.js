@@ -1,11 +1,12 @@
                                                            
+import { buildChampionSituation } from "../ChampionSituation.js";
                                            
                                                        
 import { PUSH_LANE_SCORE, PUSH_TOWER_SCORE } from "../AiTuning.js";
 
 /**
- * Siege an enemy structure once minions are tanking it, or keep marching an
- * assigned push lane. Junglers leave structures to the laners.
+ * Siege with minion aggro or execute assigned push rotation.
+ * @see docs/CHAMPION_AI.md — Push tower
  */
 export class PushTowerAction                   {
            name = "PUSH_TOWER";
@@ -15,12 +16,12 @@ export class PushTowerAction                   {
       return 0;
     }
 
-    const target = context.findTargetForChampion(champion);
-    if (target && target.kind === "structure") {
+    const situation = buildChampionSituation(champion, context);
+    if (situation.farmTarget?.kind === "structure") {
       return PUSH_TOWER_SCORE;
     }
 
-    if (champion.rotationLane && champion.rotationIntent === "push") {
+    if (situation.hasRotation && situation.rotationPush) {
       return PUSH_LANE_SCORE;
     }
 

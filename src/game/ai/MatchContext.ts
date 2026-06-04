@@ -23,6 +23,7 @@ export interface MatchContext {
   applyDamage(attacker: Entity, target: Entity, amount: number, damageType: DamageType, source: string): void;
 
   findTargetForChampion(champion: Champion): Entity | null;
+  findNearestEnemyMinionInLane(champion: Champion, radius: number): Minion | null;
   findObjectiveForJungler(champion: Champion): Monster | null;
   findCampForJungler(champion: Champion): Monster | null;
   getUnsafeEnemyTowerForChampion(champion: Champion): Structure | null;

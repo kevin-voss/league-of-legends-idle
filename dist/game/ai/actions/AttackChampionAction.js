@@ -1,41 +1,45 @@
                                                            
+import { buildChampionSituation, shouldPrioritizeLastHit } from "../ChampionSituation.js";
                                            
                                                        
 import { ENGAGE_RADIUS } from "../AiTuning.js";
+import { getRoleProfile } from "../RoleProfiles.js";
 
 /**
- * Commit to killing the nearest enemy champion. Bravery scales with the HP gap,
- * nearby allied champions and minion backup; supports are reluctant duelists.
+ * Lane duel / execute when ahead or backed by wave.
+ * @see docs/CHAMPION_AI.md — Attack champion
  */
 export class AttackChampionAction                   {
            name = "ATTACK_CHAMPION";
 
   calculateScore(champion          , context              )         {
-    const target = context.getNearestEnemyChampion(champion);
-    if (!target) {
-      return 0;
-    }
-    if (champion.distanceTo(target) > ENGAGE_RADIUS) {
+    const situation = buildChampionSituation(champion, context);
+    const target = situation.laneOpponent;
+    if (!target || champion.distanceTo(target) > ENGAGE_RADIUS) {
       return 0;
     }
 
-    let score = 20; // base aggression
-    score += (champion.hpPercent - target.hpPercent) * 50;
+    if (shouldPrioritizeLastHit(situation) && target.hpPercent > 0.35) {
+      return 0;
+    }
 
-    const allies = context.getAllyChampionsInRange(champion, 420);
-    score += allies.length * 15;
+    const profile = getRoleProfile(champion.role);
+    let score = 20;
+    score += (situation.hpPercent - target.hpPercent) * 50;
+    if (target.hpPercent < 0.35) {
+      score += 50;
+    }
+
+    score += situation.alliesInEngageRange.length * 15;
 
     const minions = context.getAlliedMinionsInRange(champion, 360);
     score += Math.min(minions.length, 6) * 4;
 
-    // Supports peel rather than duel; junglers prefer their own camps to roaming.
-    if (champion.role === "support") {
-      score -= 30;
-    } else if (champion.role === "jungle") {
-      score -= 25;
+    if (champion.role === "jungle") {
+      score += 35;
     }
 
-    return Math.max(0, score);
+    return Math.max(0, score * profile.duelAggression);
   }
 
   execute(champion          , context              , dt        )       {
